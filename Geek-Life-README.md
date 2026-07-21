@@ -94,6 +94,31 @@ Then open a new terminal and run:
 geek-life
 ```
 
+### Linux / CachyOS quick install (run from project root)
+
+```bash
+chmod +x ./install.sh
+./install.sh
+```
+
+This will:
+- build `geek-life`
+- install it to `$HOME/.local/bin/geek-life`
+- add `$HOME/.local/bin` to your shell PATH config if missing
+
+Then open a new terminal and run:
+
+```bash
+geek-life
+```
+
+Optional flags:
+
+```bash
+./install.sh --skip-path-update
+./install.sh --bin-dir=$HOME/bin
+```
+
 ## :keyboard: Keyboard shortcuts
 
 Shortcut key for a pane/element will be **marked with underline**.
