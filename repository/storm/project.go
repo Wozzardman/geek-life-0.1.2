@@ -17,10 +17,31 @@ func NewProjectRepository(db *storm.DB) repository.ProjectRepository {
 }
 
 func (repo *projectRepository) GetAll() ([]model.Project, error) {
+	var all []model.Project
+	if err := repo.DB.All(&all); err != nil {
+		return nil, err
+	}
 	var projects []model.Project
-	err := repo.DB.All(&projects)
+	for _, p := range all {
+		if !p.Archived {
+			projects = append(projects, p)
+		}
+	}
+	return projects, nil
+}
 
-	return projects, err
+func (repo *projectRepository) GetAllArchived() ([]model.Project, error) {
+	var all []model.Project
+	if err := repo.DB.All(&all); err != nil {
+		return nil, err
+	}
+	var archived []model.Project
+	for _, p := range all {
+		if p.Archived {
+			archived = append(archived, p)
+		}
+	}
+	return archived, nil
 }
 
 func (repo *projectRepository) GetByID(id int64) (model.Project, error) {

@@ -15,6 +15,7 @@ import (
 type ProjectPane struct {
 	*tview.Flex
 	projects            []model.Project
+	archivedProjects    []model.Project
 	list                *tview.List
 	newProject          *tview.InputField
 	repo                repository.ProjectRepository
@@ -157,6 +158,7 @@ func (pane *ProjectPane) loadListItems(focus bool) {
 	pane.addDynamicLists()
 	pane.list.AddItem("", "", 0, nil)
 	pane.addProjectList()
+	pane.addArchivedSection()
 
 	if focus {
 		app.SetFocus(pane)
@@ -166,4 +168,64 @@ func (pane *ProjectPane) loadListItems(focus bool) {
 // GetActiveProject provides pointer to currently active project
 func (pane *ProjectPane) GetActiveProject() *model.Project {
 	return pane.activeProject
+}
+
+// ArchiveActiveProject archives the currently active project (hides it from the main list)
+func (pane *ProjectPane) ArchiveActiveProject() {
+	if pane.activeProject == nil {
+		return
+	}
+	if err := pane.repo.UpdateField(pane.activeProject, "Archived", true); err != nil {
+		statusBar.showForSeconds("[red]Could not archive project: "+err.Error(), 5)
+		return
+	}
+	pane.activeProject.Archived = true
+	statusBar.showForSeconds("[yellow]Project archived.", 5)
+	taskPane.ClearList()
+	removeThirdCol()
+	pane.loadListItems(true)
+}
+
+// UnarchiveActiveProject restores an archived project back to the active project list
+func (pane *ProjectPane) UnarchiveActiveProject() {
+	if pane.activeProject == nil {
+		return
+	}
+	if err := pane.repo.UpdateField(pane.activeProject, "Archived", false); err != nil {
+		statusBar.showForSeconds("[red]Could not restore project: "+err.Error(), 5)
+		return
+	}
+	pane.activeProject.Archived = false
+	statusBar.showForSeconds("[lime]Project restored to active.", 5)
+	taskPane.ClearList()
+	removeThirdCol()
+	pane.loadListItems(true)
+}
+
+func (pane *ProjectPane) addArchivedSection() {
+	var err error
+	pane.archivedProjects, err = pane.repo.GetAllArchived()
+	if err != nil || len(pane.archivedProjects) == 0 {
+		return
+	}
+	pane.list.AddItem("", "", 0, nil)
+	pane.addSection("Archived")
+	for i := range pane.archivedProjects {
+		pane.addArchivedProjectToList(i)
+	}
+}
+
+func (pane *ProjectPane) addArchivedProjectToList(i int) {
+	pane.list.AddItem("[::d]~ "+pane.archivedProjects[i].Title, "", 0, func(idx int) func() {
+		return func() { pane.activateArchivedProject(idx) }
+	}(i))
+}
+
+func (pane *ProjectPane) activateArchivedProject(idx int) {
+	pane.activeProject = &pane.archivedProjects[idx]
+	taskPane.LoadProjectTasks(*pane.activeProject)
+	removeThirdCol()
+	projectDetailPane.SetProject(pane.activeProject)
+	contents.AddItem(projectDetailPane, 25, 0, false)
+	app.SetFocus(taskPane)
 }

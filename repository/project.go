@@ -5,6 +5,7 @@ import "github.com/ajaxray/geek-life/model"
 // ProjectRepository interface defines methods of project data accessor
 type ProjectRepository interface {
 	GetAll() ([]model.Project, error)
+	GetAllArchived() ([]model.Project, error)
 	GetByID(id int64) (model.Project, error)
 	GetByTitle(title string) (model.Project, error)
 	GetByUUID(UUID string) (model.Project, error)

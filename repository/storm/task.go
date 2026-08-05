@@ -85,7 +85,8 @@ func (t *taskRepository) Create(project model.Project, title, details, UUID stri
 }
 
 func (t *taskRepository) Update(task *model.Task) error {
-	return t.DB.Update(task)
+	// DB.Save instead of DB.Update so zero-value fields (empty notes, zero dates) are persisted
+	return t.DB.Save(task)
 }
 
 func (t *taskRepository) UpdateField(task *model.Task, field string, value interface{}) error {

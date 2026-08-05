@@ -1,6 +1,8 @@
 package main
 
 import (
+	goruntime "runtime"
+
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -250,7 +252,15 @@ func (td *TaskDetailPane) editInExternalEditor() {
 
 	var messageToShow, updatedContent string
 	app.Suspend(func() {
-		cmd := exec.Command(util.GetEnvStr("EDITOR", "vim"), tmpFileName)
+		editor := util.GetEnvStr("EDITOR", "")
+		if editor == "" {
+			if goruntime.GOOS == "windows" {
+				editor = "notepad"
+			} else {
+				editor = "vim"
+			}
+		}
+		cmd := exec.Command(editor, tmpFileName)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -282,19 +292,18 @@ func (td *TaskDetailPane) editInExternalEditor() {
 	// app.SetFocus(td)
 }
 
-// writeToTmpFile writes given content to a tmpFile and returns the filename
+// writeToTmpFile writes content to a new temp file, using a single handle to avoid Windows file-locking issues.
 func writeToTmpFile(content string) (string, error) {
 	tmpFile, err := ioutil.TempFile("", "geek_life_task_note_*.md")
 	if err != nil {
 		return "", err
 	}
 	fileName := tmpFile.Name()
-
-	if err = ioutil.WriteFile(fileName, []byte(content), 0777); err != nil {
-		return "", err
+	_, err = tmpFile.WriteString(content)
+	if closeErr := tmpFile.Close(); closeErr != nil && err == nil {
+		err = closeErr
 	}
-
-	return fileName, tmpFile.Close()
+	return fileName, err
 }
 
 func (td *TaskDetailPane) handleShortcuts(event *tcell.EventKey) *tcell.EventKey {
@@ -340,6 +349,10 @@ func (td *TaskDetailPane) handleShortcuts(event *tcell.EventKey) *tcell.EventKey
 
 // SetTask sets a Task to be displayed
 func (td *TaskDetailPane) SetTask(task *model.Task) {
+	// Auto-save if the in-app editor is active so navigating away doesn't discard changes
+	if td.task != nil && !td.taskDetailView.Readonly {
+		td.updateTaskNote(td.taskDetailView.Buf.String())
+	}
 	td.task = task
 
 	td.header.SetTask(task)
