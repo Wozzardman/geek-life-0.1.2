@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
-	"reflect"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/pgavlin/femto"
 	"github.com/rivo/tview"
 
 	"github.com/ajaxray/geek-life/model"
-	"github.com/ajaxray/geek-life/util"
 )
 
 var blankCell = tview.NewTextView()
@@ -39,17 +39,27 @@ func makeLightTextInput(placeholder string) *tview.InputField {
 		SetFieldBackgroundColor(tcell.ColorLightBlue)
 }
 
-// If input text is a valid date, parse it. Or get current date
+// parseDateInput accepts the same terse dates as quick task creation.
+func parseDateInput(inputText string, now time.Time) (time.Time, bool) {
+	value := strings.ToLower(strings.TrimSpace(inputText))
+	if date, ok := parseQuickDueDate(value, now); ok {
+		return date, true
+	}
+	return time.Time{}, false
+}
+
+// If input text is a valid date, parse it. Or get current date.
 func parseDateInputOrCurrent(inputText string) time.Time {
-	if dateTime, err := time.Parse(dateLayoutISO, inputText); err == nil {
-		return toDate(dateTime)
+	if dateTime, ok := parseDateInput(inputText, time.Now()); ok {
+		return dateTime
 	}
 
 	return toDate(time.Now())
 }
 
 func toDate(dateTime time.Time) time.Time {
-	return time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, time.Local)
+	local := dateTime.In(time.Local)
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.Local)
 }
 
 func makeButton(label string, handler func()) *tview.Button {
@@ -62,14 +72,14 @@ func makeButton(label string, handler func()) *tview.Button {
 }
 
 func ignoreKeyEvt() bool {
-	textInputs := []string{"*tview.InputField", "*femto.View"}
-	return util.InArray(reflect.TypeOf(app.GetFocus()).String(), textInputs)
-}
-
-// yetToImplement - to use as callback for unimplemented features
-func yetToImplement(feature string) func() {
-	message := fmt.Sprintf("[yellow]%s is yet to implement. Please Check in next version.", feature)
-	return func() { statusBar.showForSeconds(message, 5) }
+	switch focused := app.GetFocus().(type) {
+	case *tview.InputField:
+		return true
+	case *femto.View:
+		return !focused.Readonly
+	default:
+		return false
+	}
 }
 
 func removeThirdCol() {
@@ -78,16 +88,18 @@ func removeThirdCol() {
 }
 
 func getTaskTitleColor(task model.Task) string {
-	colorName := "smokewhite"
+	colorName := "white"
 
-	if task.Completed {
-		colorName = "green"
+	if task.DeletedAt != 0 {
+		colorName = "gray"
+	} else if task.Completed {
+		colorName = "darkgreen"
 	} else if task.DueDate != 0 {
-		dayDiff := int(time.Unix(task.DueDate, 0).Sub(time.Now()).Hours() / 24)
-
-		if dayDiff == 0 {
+		due := toDate(time.Unix(task.DueDate, 0))
+		today := toDate(time.Now())
+		if due.Equal(today) {
 			colorName = "orange"
-		} else if dayDiff < 0 {
+		} else if due.Before(today) {
 			colorName = "red"
 		}
 	}
@@ -96,25 +108,56 @@ func getTaskTitleColor(task model.Task) string {
 }
 
 func makeTaskListingTitle(task model.Task) string {
-	checkbox := "[ []"
+	checkbox := tview.Escape("[ ]")
 	if task.Completed {
-		checkbox = "[x[]"
+		checkbox = tview.Escape("[x]")
 	}
 
+	pin := ""
+	if task.Pinned {
+		pin = "[deepskyblue]★[white] "
+	}
+	priority := ""
+	switch task.Priority {
+	case 1:
+		priority = "[yellow]·[white] "
+	case 2:
+		priority = "[orange]![white] "
+	case 3:
+		priority = "[red]!![white] "
+	}
 	prefix := ""
 	if projectPane.GetActiveProject() == nil {
 		if project, err := projectRepo.GetByID(task.ProjectID); err == nil {
-			prefix = project.Title + ": "
+			prefix = "[::d]" + tview.Escape(project.Title) + ":[::-] "
 		}
 	}
+	tags := ""
+	if len(task.Tags) != 0 {
+		visibleTags := task.Tags
+		if len(visibleTags) > 2 {
+			visibleTags = visibleTags[:2]
+		}
+		tags = " [steelblue]#" + tview.Escape(strings.Join(visibleTags, " #"))
+	}
+	due := ""
+	if task.DueDate != 0 && !task.Completed {
+		dueTime := time.Unix(task.DueDate, 0)
+		due = " [::d]" + dueTime.Format("Jan 02")
+	}
 
-	return fmt.Sprintf("[%s]%s %s%s", getTaskTitleColor(task), checkbox, prefix, task.Title)
+	return fmt.Sprintf("[%s]%s%s %s%s%s%s", getTaskTitleColor(task), pin, priority, checkbox, prefix, tview.Escape(task.Title), tags+due)
 }
 
 func findProjectByID(id int64) *model.Project {
 	for i := range projectPane.projects {
 		if projectPane.projects[i].ID == id {
 			return &projectPane.projects[i]
+		}
+	}
+	for i := range projectPane.archivedProjects {
+		if projectPane.archivedProjects[i].ID == id {
+			return &projectPane.archivedProjects[i]
 		}
 	}
 

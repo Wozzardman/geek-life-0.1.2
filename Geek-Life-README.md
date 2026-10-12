@@ -19,24 +19,27 @@
 
 ### :crystal_ball: Highlights
 
-- For ninjas - do things faster with keyboard shortcuts
-- Markdown lovers, feel at :house:! You'll see markdown everywhere.
-- Full featured (almost) - Projects, Tasks, due-dates, task notes...
-- A <4MB app that takes <1% CPU and ~7MB memory <sup>1</sup> - how much lighter you can think?
-- Task note editor with markdown syntax highlighting<sup>2</sup>
-- Full mouse support
+- Keyboard-first from end to end: Vim-style navigation, command palette, global search, and quick capture
+- Fast task syntax: `Ship release #work !3 @tomorrow ~weekly +pin`
+- Smart lists for today, overdue, upcoming, pinned, high-priority, completed, unscheduled, and trash
+- Markdown task notes with syntax highlighting and external-editor support
+- Paste clipboard images into task notes on Windows, then inspect their real pixels through automatic Sixel, Kitty, or iTerm backends
+- Tags, four priority levels, pins, recurring tasks, completion timestamps, and project archiving
+- Recoverable deletion with Trash and keyboard undo; confirmed permanent deletion for destructive actions
+- Portable JSON backups from the command palette or command line
+- Optional mouse support, with every primary workflow available from the keyboard
 
 ### :dart: Roadmap
 - [x] Create Project
 - [x] Delete Project
-- [ ] Edit Project
+- [x] Edit Project
 - [x] Create Task (under project)
 - [x] Set Task due date (as `yyyy-mm-dd`) with shortcut
 - [x] Set Task due date with quick input buttons (today, +1 day, -1 day)
 - [x] Update Task Title
 - [x] Tasklist items should indicate status (done, pending, overdue) using colors 
 - [x] Export Tasks (Copy title, dueDate and description to clipboard as Markdown)
-- [ ] Pin Tasks
+- [x] Pin Tasks
 - [x] Shortcut for Adding new Project and Task
 - [x] Global shortcuts for jumping to Projects or Tasks panel anytime
 - [x] Cleanup all completed tasks of project
@@ -45,10 +48,17 @@
 - [x] Status bar should display success/error message of actions
 - [x] Status bar may display quick tips based on focused element
 - [x] Dynamic lists 
-    - Today - Due Today and overdue 
+    - Today
+    - Overdue
     - Tomorrow 
     - Upcoming - Due in next 7 days
     - Unscheduled - tasks without due date
+- [x] Cross-project structured search
+- [x] Tags, priorities, pins, and recurring tasks
+- [x] Trash, restore, and undo deletion
+- [x] Command palette and in-app keyboard reference
+- [x] JSON backup command
+- [x] Full-screen image viewer with zoom and keyboard panning
 - [ ] Integrations
     - todo.txt (coming soon...)
     - Google Tasks 
@@ -82,6 +92,17 @@ From the project root in PowerShell:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+The installer finds Go from PATH or common Windows install locations (including
+`C:\Program Files\Go`). You can also specify locations explicitly:
+
+```powershell
+.\install.ps1 -GoPath "C:\Program Files\Go\bin\go.exe"
+.\install.ps1 -BinDir "$HOME\tools" -SkipPathUpdate
+```
+
+If Go is unavailable but a prebuilt `geek-life.exe` is present beside the
+script, the installer installs that binary.
 
 This will:
 - build `geek-life.exe`
@@ -130,28 +151,57 @@ You'll see a currently focused pane bordered with double line.
 
 In case writing in a text input (e,g, new project/task, due date), you have to `Enter` to submit/save. 
 
-| Context            | Shortcut            | Action                                               |
-| ---                | :---:               | ---                                                  |
-| Global             | `p`                 | Go to Project list                                   |
-| Global             | `t`                 | Go to Task list                                      |
-| Projects           | `n`                 | New Project                                          |
-| Projects           | `↑`/`k`/`Shift+Tab` | Go up in project list                                |
-| Projects           | `↓`/`j`/`Tab`       | Go down in project list                              |
-| Tasks              | `n`                 | New Task                                             |
-| Tasks              | `Esc`/`h`           | Go back to Projects Pane                             |
-| Tasks              | `↑`/`k`/`Shift+Tab` | Go up in task list                                   |
-| Tasks              | `↓`/`j`/`Tab`       | Go down in task list                                 |
-| Tasks              | `c`                 | Clear completed tasks                                |
-| Tasks              | `d`                 | Delete Project                                       |
-| Task Detail        | `Esc`/`h`           | Go back to Tasks Pane                                |
-| Task Detail        | `Space`             | Toggle task as done/pending                          |
-| Task Detail        | `d`                 | Set Due date                                         |
-| Task Detail        | `↓`/`↑`             | Scroll Up/Down the note editor                       |
-| Task Detail        | `e`                 | Activate note editor for modification                |
-| Task Detail        | `v`                 | Edit task details in external editor (default `vim`) |
-| Task Detail        | `r`                 | Rename Task Title                                    |
-| Task Detail        | `x`                 | Export Task to clipboard                                    |
-| Active Note Editor | `Esc`               | Deactivate note editor and save content              |
+Press `?` anywhere in the app for the complete, scrollable keyboard reference.
+
+| Context | Shortcut | Action |
+| --- | :---: | --- |
+| Global | `:` / `Ctrl+P` | Open the fuzzy command palette |
+| Global | `/` | Search every active task |
+| Global | `?` | Open keyboard help |
+| Global | `p` / `t` | Focus Projects / Tasks |
+| Global | `Ctrl+N` | Start a task in the active project |
+| Lists | `j` / `k`, arrows, `Tab` | Move down / up |
+| Lists | `Enter` / `Esc` | Open / move back |
+| Projects | `n` | Create a project |
+| Project actions | `r` / `a` / `c` / `d` | Rename, archive, clear completed, permanently delete |
+| Tasks | `n` | Quick-add a task |
+| Tasks | `Space` / `!` / `s` | Complete, cycle priority, pin |
+| Tasks | `[` / `]` | Reorder inside a project |
+| Tasks | `D` / `u` | Move to Trash / undo or restore |
+| Task detail | `e` / `v` | Edit note in-app / in `$EDITOR` |
+| Task detail | `d` / `g` / `R` | Edit due date, tags, recurrence |
+| Task detail | `i` / `Ctrl+V` | Paste a clipboard image on Windows |
+| Task detail | `o` / `O` | Open real-pixel / compatibility cell image viewer |
+| Task detail | `r` / `x` | Rename / export Markdown |
+| Cell image viewer | `n` | Switch to the native-pixel viewer |
+| Cell image viewer | `+` / `-`, `1`-`9` | Zoom in/out or select a zoom level |
+| Image viewer | `h` `j` `k` `l` / arrows | Pan the zoomed image |
+| Image viewer | `b` | Toggle font-dependent sextant/color mode |
+| Image viewer | `f`, `[` / `]`, `Esc` | Fit, change image, close |
+| Note editor | `Esc` | Save and leave the editor |
+
+### Quick capture and search
+
+Metadata is optional and can be added while typing a task title:
+
+```text
+Ship release #work #terminal !3 @tomorrow ~weekly +pin
+```
+
+- Priorities: `!1`, `!2`, `!3` (or `!low`, `!medium`, `!high`)
+- Dates: `@today`, `@tomorrow`, `@week`, or `@yyyy-mm-dd`
+- Recurrence: `~daily`, `~weekly`, `~monthly`, or `~yearly`
+- Any number of `#tags`, plus `+pin`
+
+Search is token-based and combines filters. For example:
+
+```text
+installer #work @geek !2 is:open due:overdue
+```
+
+Supported filters include `#tag`, `@project`, minimum priority (`!2`),
+`is:done`, `is:open`, `is:pinned`, `is:recurring`, `due:today`,
+`due:tomorrow`, `due:overdue`, `due:none`, and `due:yyyy-mm-dd`.
 
 **Tips about using shortcuts efficiently:**  
 
@@ -191,7 +241,7 @@ Some More hints:
 
 ## :hammer_and_wrench: Building blocks
 
-- Made with :heart: and [golang](https://golang.org/) 1.14 *(you don't need golang to run it)*
+- Built with [Go](https://go.dev/) 1.24+ *(you don't need Go to run a prebuilt binary)*
 - Designed with [tview](https://github.com/rivo/tview) - interactive widgets for terminal-based UI
 - Task Note editor made with [femto](https://github.com/pgavlin/femto)  
 - Datastore is [storm](https://github.com/asdine/storm) - a powerful toolkit for [BoltDB](https://github.com/etcd-io/bbolt)
@@ -214,6 +264,30 @@ In that case, just mention `DB_FILE` as an environment variable.
 ```bash
 DB_FILE=~/dropbox/geek-life/default.db geek-life
 ```
+
+Pasted images are stored in an `attachments` directory beside the database.
+They are also referenced from the task note as Markdown. The in-app preview
+uses terminal true color and block characters, so its fidelity depends on the
+terminal's color support. The side panel is a compact thumbnail; press `o` to
+open the full-terminal viewer, then use `1`-`9` to zoom and arrows or
+`h`/`j`/`k`/`l` to pan. Press `b` for a higher-resolution monochrome mode that
+preserves much more detail in screenshots, text, and diagrams. Geek-life
+automatically selects that mode when an image looks like a document or
+screenshot; `b` always lets you override it.
+
+#### :question: How do I back up my data?
+
+Choose **Create JSON backup** from the command palette, or run:
+
+```bash
+geek-life backup
+geek-life backup /path/to/geek-life-backup.json
+```
+
+Automatic backup filenames are written under `backups` beside the database.
+The JSON includes active and archived projects plus active and trashed tasks.
+It records attachment paths but does not embed image bytes; copy the neighboring
+`attachments` directory as well when making a full disaster-recovery backup.
 
 #### :question: How can I suggest a feature?
 

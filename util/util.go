@@ -2,7 +2,6 @@ package util
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,19 +15,7 @@ import (
 
 // ConnectStorm Create database connection
 func ConnectStorm() *storm.DB {
-	dbPath := GetEnvStr("DB_FILE", "")
-	var err error
-
-	if dbPath == "" {
-		// Try in home dir
-		dbPath, err = homedir.Expand("~/.geek-life/default.db")
-
-		// If home dir is not detected, try in system tmp dir
-		if err != nil {
-			f, _ := ioutil.TempFile("geek-life", "default.db")
-			dbPath = f.Name()
-		}
-	}
+	dbPath := DBPath()
 
 	CreateDirIfNotExist(filepath.Dir(dbPath))
 
@@ -36,6 +23,31 @@ func ConnectStorm() *storm.DB {
 	FatalIfError(openErr, "Could not connect Embedded Database File")
 
 	return db
+}
+
+// DBPath resolves the configured database path, including a stable fallback
+// in the system temporary directory when the home directory is unavailable.
+func DBPath() string {
+	if configured := GetEnvStr("DB_FILE", ""); configured != "" {
+		if expanded, err := homedir.Expand(configured); err == nil {
+			configured = expanded
+		}
+		if absolute, err := filepath.Abs(configured); err == nil {
+			return absolute
+		}
+		return configured
+	}
+
+	if defaultDB, err := homedir.Expand("~/.geek-life/default.db"); err == nil {
+		return defaultDB
+	}
+	return filepath.Join(os.TempDir(), "geek-life", "default.db")
+}
+
+// DataDir returns the directory that contains Geek-life's database and
+// associated files, such as task image attachments.
+func DataDir() string {
+	return filepath.Dir(DBPath())
 }
 
 // CreateDirIfNotExist creates a directory if not found
@@ -52,10 +64,10 @@ func CreateDirIfNotExist(dir string) {
 func UnixToTime(timestamp string) time.Time {
 	parts := strings.Split(timestamp, ".")
 	i, err := strconv.ParseInt(parts[0], 10, 64)
-	if LogIfError(err, "Could not parse timestamp : "+timestamp+" (using current time instead)") {
+	if err == nil {
 		return time.Unix(i, 0)
 	}
-
+	LogIfError(err, "Could not parse timestamp %s (using current time instead)", timestamp)
 	return time.Now()
 }
 
@@ -63,7 +75,7 @@ func UnixToTime(timestamp string) time.Time {
 func LogIfError(err error, msgOrPattern string, args ...interface{}) bool {
 	if err != nil {
 		message := fmt.Sprintf(msgOrPattern, args...)
-		log.Printf("%s: %w\n", message, err)
+		log.Printf("%s: %v\n", message, err)
 
 		return true
 	}
@@ -75,7 +87,7 @@ func LogIfError(err error, msgOrPattern string, args ...interface{}) bool {
 func FatalIfError(err error, msgOrPattern string, args ...interface{}) {
 	message := fmt.Sprintf(msgOrPattern, args...)
 
-	if LogIfError(err, message) {
+	if LogIfError(err, "%s", message) {
 		log.Fatal("FATAL ERROR: Exiting program! - ", message, "\n")
 	}
 }

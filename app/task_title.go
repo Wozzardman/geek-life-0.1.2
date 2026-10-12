@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -39,7 +40,7 @@ func NewTaskDetailHeader(taskRepo repository.TaskRepository) *TaskDetailHeader {
 		AddItem(blankCell, 0, 1, false).
 		AddItem(makeButton("[::ub]r[::-]ename", func() { header.ShowRename() }), 8, 0, false).
 		AddItem(blankCell, 1, 0, false).
-		AddItem(makeButton("[red][::ub]D[::-]elete[white]", func() { taskPane.DeleteCurrentTask(); app.SetFocus(taskPane) }), 8, 0, false).
+		AddItem(makeButton("[red][::ub]D[::-]elete[white]", taskPane.DeleteCurrentTask), 8, 0, false).
 		AddItem(blankCell, 1, 0, false).
 		AddItem(makeButton("e[::ub]x[::-]port", func() { taskDetailPane.Export() }), 8, 0, false)
 
@@ -56,7 +57,7 @@ func (header *TaskDetailHeader) bindRenameEvent() *tview.InputField {
 	return header.renameText.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
-			name := header.renameText.GetText()
+			name := strings.TrimSpace(header.renameText.GetText())
 			if len(name) < 3 {
 				statusBar.showForSeconds("[red::]Task title should be at least 3 character", 5)
 				return
@@ -70,7 +71,8 @@ func (header *TaskDetailHeader) bindRenameEvent() *tview.InputField {
 			}
 
 			header.pages.SwitchToPage("title")
-			taskPane.ReloadCurrentTask()
+			header.SetTask(header.task)
+			taskPane.RefreshCurrentTaskListing()
 		case tcell.KeyEsc:
 			header.pages.SwitchToPage("title")
 		}
@@ -80,8 +82,7 @@ func (header *TaskDetailHeader) bindRenameEvent() *tview.InputField {
 // SetTask set a task to the header
 func (header *TaskDetailHeader) SetTask(task *model.Task) {
 	header.task = task
-	header.taskName.SetText(task.Title)
-	header.taskName.SetText(fmt.Sprintf("[%s::b]# %s", getTaskTitleColor(*task), task.Title))
+	header.taskName.SetText(fmt.Sprintf("[%s::b]# %s", getTaskTitleColor(*task), tview.Escape(task.Title)))
 }
 
 // ShowRename activate edit option of task title

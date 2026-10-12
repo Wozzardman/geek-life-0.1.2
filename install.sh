@@ -25,14 +25,6 @@ write_step() {
     echo "[geek-life] $1"
 }
 
-ensure_go_installed() {
-    if ! command -v go >/dev/null 2>&1; then
-        echo "[geek-life] Go is not installed or not in PATH." >&2
-        echo "[geek-life] On CachyOS/Arch, install with: sudo pacman -S go" >&2
-        exit 1
-    fi
-}
-
 update_path_if_needed() {
     local dir="$1"
 
@@ -92,13 +84,19 @@ main() {
     output_file="$script_dir/geek-life"
     target_file="$USER_BIN_DIR/geek-life"
 
-    ensure_go_installed
-
-    write_step "Building geek-life"
-    (
-        cd "$script_dir"
-        go build -o "$output_file" ./app
-    )
+    if command -v go >/dev/null 2>&1; then
+        write_step "Building geek-life"
+        (
+            cd "$script_dir"
+            go build -o "$output_file" ./app
+        )
+    elif [[ -x "$output_file" ]]; then
+        write_step "Go was not found; installing the existing prebuilt geek-life binary"
+    else
+        echo "[geek-life] Go is not in PATH and no prebuilt geek-life binary exists." >&2
+        echo "[geek-life] Install Go, or place a prebuilt binary beside install.sh." >&2
+        exit 1
+    fi
 
     write_step "Installing to $target_file"
     mkdir -p "$USER_BIN_DIR"

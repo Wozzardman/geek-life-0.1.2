@@ -16,3 +16,4 @@
 builds/
 /geek-life
 /geek-life.db
+/.tmp-go-cache/

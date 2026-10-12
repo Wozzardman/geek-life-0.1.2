@@ -20,6 +20,7 @@ func NewProjectDetailPane() *ProjectDetailPane {
 		Flex:       tview.NewFlex().SetDirection(tview.FlexRow),
 		archiveBtn: makeButton("[::u]A[::-]rchive", nil),
 	}
+	renameBtn := makeButton("[::u]R[::-]ename Project", projectPane.RenameActiveProject)
 	deleteBtn := makeButton("[::u]D[::-]elete Project", projectPane.RemoveActivateProject)
 	clearBtn := makeButton("[::u]C[::-]lear Completed Tasks", taskPane.ClearCompletedTasks)
 
@@ -27,6 +28,8 @@ func NewProjectDetailPane() *ProjectDetailPane {
 	pane.archiveBtn.SetBackgroundColor(tcell.ColorDarkOliveGreen)
 
 	pane.
+		AddItem(renameBtn, 3, 1, false).
+		AddItem(blankCell, 1, 1, false).
 		AddItem(pane.archiveBtn, 3, 1, false).
 		AddItem(blankCell, 1, 1, false).
 		AddItem(deleteBtn, 3, 1, false).
@@ -42,7 +45,7 @@ func NewProjectDetailPane() *ProjectDetailPane {
 // SetProject Sets the active Project
 func (pd *ProjectDetailPane) SetProject(project *model.Project) {
 	pd.project = project
-	pd.SetTitle("[::b]" + pd.project.Title)
+	pd.SetTitle("[::b]" + tview.Escape(pd.project.Title))
 
 	if project.Archived {
 		pd.archiveBtn.SetLabel("[::u]U[::-]narchive")
@@ -59,6 +62,9 @@ func (pd *ProjectDetailPane) isShowing() bool {
 
 func (pd *ProjectDetailPane) handleShortcuts(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Rune() {
+	case 'r':
+		projectPane.RenameActiveProject()
+		return nil
 	case 'a':
 		if pd.project != nil && pd.project.Archived {
 			projectPane.UnarchiveActiveProject()

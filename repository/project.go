@@ -13,4 +13,5 @@ type ProjectRepository interface {
 	Update(p *model.Project) error
 	UpdateField(p *model.Project, field string, value interface{}) error
 	Delete(p *model.Project) error
+	DeleteWithTasks(p *model.Project) error
 }

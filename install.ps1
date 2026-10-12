@@ -1,5 +1,7 @@
 param(
-    [switch]$SkipPathUpdate
+    [switch]$SkipPathUpdate,
+    [string]$BinDir,
+    [string]$GoPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,26 +11,78 @@ function Write-Step {
     Write-Host "[geek-life] $Message"
 }
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$outputFile = Join-Path $scriptDir "geek-life.exe"
-$userBinDir = Join-Path $HOME "bin"
-$targetFile = Join-Path $userBinDir "geek-life.exe"
+function Resolve-GoExecutable {
+    param([string]$ExplicitPath)
 
-if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-    throw "Go is not installed or not in PATH. Install Go from https://go.dev/dl/ and rerun this script."
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        if (-not (Test-Path -LiteralPath $ExplicitPath -PathType Leaf)) {
+            throw "The Go executable supplied with -GoPath does not exist: $ExplicitPath"
+        }
+        return (Resolve-Path -LiteralPath $ExplicitPath).Path
+    }
+
+    $goCommand = Get-Command go -ErrorAction SilentlyContinue
+    if ($goCommand) {
+        return $goCommand.Source
+    }
+
+    $candidates = @()
+    if ($env:ProgramFiles) {
+        $candidates += Join-Path $env:ProgramFiles "Go\bin\go.exe"
+    }
+    if (${env:ProgramFiles(x86)}) {
+        $candidates += Join-Path ${env:ProgramFiles(x86)} "Go\bin\go.exe"
+    }
+    if ($env:LOCALAPPDATA) {
+        $candidates += Join-Path $env:LOCALAPPDATA "Programs\Go\bin\go.exe"
+    }
+    if ($env:USERPROFILE) {
+        $candidates += Join-Path $env:USERPROFILE "scoop\apps\go\current\bin\go.exe"
+    }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    return $null
 }
 
-Write-Step "Building geek-life.exe"
-Push-Location $scriptDir
-try {
-    go build -o $outputFile ./app
-} finally {
-    Pop-Location
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$outputFile = Join-Path $scriptDir "geek-life.exe"
+$userBinDir = if ([string]::IsNullOrWhiteSpace($BinDir)) { Join-Path $HOME "bin" } else { $BinDir }
+$targetFile = Join-Path $userBinDir "geek-life.exe"
+$goExecutable = Resolve-GoExecutable -ExplicitPath $GoPath
+
+if ($goExecutable) {
+    Write-Step "Building geek-life.exe with $goExecutable"
+    Push-Location $scriptDir
+    try {
+        & $goExecutable build -o $outputFile ./app
+        if ($LASTEXITCODE -ne 0) {
+            throw "Go build failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        Pop-Location
+    }
+} elseif (Test-Path -LiteralPath $outputFile -PathType Leaf) {
+    Write-Step "Go was not found; installing the existing prebuilt geek-life.exe"
+} else {
+    throw "Go was not found in PATH or a common install location, and no prebuilt geek-life.exe exists. Install Go from https://go.dev/dl/, or rerun with -GoPath C:\path\to\go.exe."
 }
 
 Write-Step "Installing to $targetFile"
 New-Item -ItemType Directory -Path $userBinDir -Force | Out-Null
-Copy-Item -Path $outputFile -Destination $targetFile -Force
+$resolvedOutput = (Resolve-Path -LiteralPath $outputFile).Path
+$resolvedTarget = [IO.Path]::GetFullPath($targetFile)
+if (-not $resolvedOutput.Equals($resolvedTarget, [StringComparison]::OrdinalIgnoreCase)) {
+    try {
+        Copy-Item -LiteralPath $resolvedOutput -Destination $resolvedTarget -Force
+    } catch [System.IO.IOException] {
+        throw "Could not replace $resolvedTarget because Geek-life is still running. Exit every Geek-life instance, then rerun .\install.ps1."
+    }
+}
 
 if (-not $SkipPathUpdate) {
     $currentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")

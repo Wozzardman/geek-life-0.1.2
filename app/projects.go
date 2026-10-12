@@ -21,6 +21,8 @@ type ProjectPane struct {
 	repo                repository.ProjectRepository
 	activeProject       *model.Project
 	projectListStarting int // The index in list where project names starts
+	selectable          map[int]bool
+	defaultSelection    int
 }
 
 // NewProjectPane initializes
@@ -30,6 +32,7 @@ func NewProjectPane(repo repository.ProjectRepository) *ProjectPane {
 		list:       tview.NewList().ShowSecondaryText(false),
 		newProject: makeLightTextInput("+[New Project]"),
 		repo:       repo,
+		selectable: make(map[int]bool),
 	}
 
 	pane.newProject.SetDoneFunc(func(key tcell.Key) {
@@ -51,7 +54,7 @@ func NewProjectPane(repo repository.ProjectRepository) *ProjectPane {
 }
 
 func (pane *ProjectPane) addNewProject() {
-	name := pane.newProject.GetText()
+	name := strings.TrimSpace(pane.newProject.GetText())
 	if len(name) < 3 {
 		statusBar.showForSeconds("[red::]Project name should be at least 3 character", 5)
 		return
@@ -61,7 +64,7 @@ func (pane *ProjectPane) addNewProject() {
 	if err != nil {
 		statusBar.showForSeconds("[red::]Failed to create Project:"+err.Error(), 5)
 	} else {
-		statusBar.showForSeconds(fmt.Sprintf("[yellow::]Project %s created. Press n to start adding new tasks.", name), 10)
+		statusBar.showForSeconds(fmt.Sprintf("[yellow::]Project %s created. Press n to start adding new tasks.", tview.Escape(name)), 10)
 		pane.projects = append(pane.projects, project)
 		pane.addProjectToList(len(pane.projects)-1, true)
 		pane.newProject.SetText("")
@@ -69,11 +72,24 @@ func (pane *ProjectPane) addNewProject() {
 }
 
 func (pane *ProjectPane) addDynamicLists() {
-	pane.addSection("Dynamic Lists")
-	pane.list.AddItem("- Today", "", 0, func() { taskPane.LoadDynamicList("today") })
-	pane.list.AddItem("- Tomorrow", "", 0, func() { taskPane.LoadDynamicList("tomorrow") })
-	pane.list.AddItem("- Upcoming", "", 0, func() { taskPane.LoadDynamicList("upcoming") })
-	pane.list.AddItem("- Unscheduled", "", 0, func() { taskPane.LoadDynamicList("unscheduled") })
+	pane.addSection("Smart Lists")
+	pane.addSelectableItem("≡ All Open", func() { taskPane.LoadDynamicList("all") })
+	pane.defaultSelection = pane.list.GetItemCount()
+	pane.addSelectableItem("◉ Today", func() { taskPane.LoadDynamicList("today") })
+	pane.addSelectableItem("⚠ Overdue", func() { taskPane.LoadDynamicList("overdue") })
+	pane.addSelectableItem("▷ Tomorrow", func() { taskPane.LoadDynamicList("tomorrow") })
+	pane.addSelectableItem("→ Upcoming", func() { taskPane.LoadDynamicList("upcoming") })
+	pane.addSelectableItem("★ Pinned", func() { taskPane.LoadDynamicList("pinned") })
+	pane.addSelectableItem("!! High Priority", func() { taskPane.LoadDynamicList("high") })
+	pane.addSelectableItem("✓ Completed", func() { taskPane.LoadDynamicList("completed") })
+	pane.addSelectableItem("− Unscheduled", func() { taskPane.LoadDynamicList("unscheduled") })
+	pane.addSelectableItem("⌫ Trash", func() { taskPane.LoadDynamicList("trash") })
+}
+
+func (pane *ProjectPane) addSelectableItem(title string, selected func()) {
+	idx := pane.list.GetItemCount()
+	pane.selectable[idx] = true
+	pane.list.AddItem(title, "", 0, selected)
 }
 
 func (pane *ProjectPane) addProjectList() {
@@ -91,12 +107,14 @@ func (pane *ProjectPane) addProjectList() {
 		pane.addProjectToList(i, false)
 	}
 
-	pane.list.SetCurrentItem(2) // Keep "Today" selected on start
+	pane.list.SetCurrentItem(pane.defaultSelection)
 }
 
 func (pane *ProjectPane) addProjectToList(i int, selectItem bool) {
 	// To avoid overriding of loop variables - https://www.calhoun.io/gotchas-and-common-mistakes-with-closures-in-go/
-	pane.list.AddItem("- "+pane.projects[i].Title, "", 0, func(idx int) func() {
+	idx := pane.list.GetItemCount()
+	pane.selectable[idx] = true
+	pane.list.AddItem("- "+tview.Escape(pane.projects[i].Title), "", 0, func(idx int) func() {
 		return func() { pane.activateProject(idx) }
 	}(i))
 
@@ -112,12 +130,20 @@ func (pane *ProjectPane) addSection(name string) {
 }
 
 func (pane *ProjectPane) handleShortcuts(event *tcell.EventKey) *tcell.EventKey {
+	switch event.Key() {
+	case tcell.KeyDown, tcell.KeyTab:
+		pane.moveSelection(1)
+		return nil
+	case tcell.KeyUp, tcell.KeyBacktab:
+		pane.moveSelection(-1)
+		return nil
+	}
 	switch event.Rune() {
 	case 'j':
-		pane.list.SetCurrentItem(pane.list.GetCurrentItem() + 1)
+		pane.moveSelection(1)
 		return nil
 	case 'k':
-		pane.list.SetCurrentItem(pane.list.GetCurrentItem() - 1)
+		pane.moveSelection(-1)
 		return nil
 	case 'n':
 		app.SetFocus(pane.newProject)
@@ -125,6 +151,21 @@ func (pane *ProjectPane) handleShortcuts(event *tcell.EventKey) *tcell.EventKey 
 	}
 
 	return event
+}
+
+func (pane *ProjectPane) moveSelection(delta int) {
+	count := pane.list.GetItemCount()
+	if count == 0 {
+		return
+	}
+	idx := pane.list.GetCurrentItem()
+	for checked := 0; checked < count; checked++ {
+		idx = (idx + delta + count) % count
+		if pane.selectable[idx] {
+			pane.list.SetCurrentItem(idx)
+			return
+		}
+	}
 }
 
 func (pane *ProjectPane) activateProject(idx int) {
@@ -139,22 +180,43 @@ func (pane *ProjectPane) activateProject(idx int) {
 
 // RemoveActivateProject deletes the currently active project
 func (pane *ProjectPane) RemoveActivateProject() {
-	if pane.activeProject != nil && pane.repo.Delete(pane.activeProject) == nil {
-
-		for i := range taskPane.tasks {
-			_ = taskRepo.Delete(&taskPane.tasks[i])
+	if pane.activeProject == nil {
+		return
+	}
+	project := pane.activeProject
+	showConfirm("Permanently delete project?", "This permanently deletes the project, all of its tasks, and their stored images:\n\n"+tview.Escape(project.Title)+"\n\nArchiving is the safer option.", func() {
+		projectTasks, _ := taskRepo.GetAllByProject(*project)
+		deletedTasks, _ := taskRepo.GetDeleted()
+		for _, task := range deletedTasks {
+			if task.ProjectID == project.ID {
+				projectTasks = append(projectTasks, task)
+			}
+		}
+		if err := pane.repo.DeleteWithTasks(project); err != nil {
+			statusBar.showForSeconds("[red]Could not delete project: "+err.Error(), 6)
+			return
 		}
 		taskPane.ClearList()
-
-		statusBar.showForSeconds("[lime]Removed Project: "+pane.activeProject.Title, 5)
+		pane.activeProject = nil
+		var attachmentErr error
+		for _, task := range projectTasks {
+			if err := removeTaskAttachments(task.ID); err != nil && attachmentErr == nil {
+				attachmentErr = err
+			}
+		}
+		if attachmentErr != nil {
+			statusBar.showForSeconds("[yellow]Project deleted, but some attachments could not be removed: "+attachmentErr.Error(), 7)
+		} else {
+			statusBar.showForSeconds("[lime]Project, tasks, and stored images permanently deleted", 5)
+		}
 		removeThirdCol()
-
 		pane.loadListItems(true)
-	}
+	})
 }
 
 func (pane *ProjectPane) loadListItems(focus bool) {
 	pane.list.Clear()
+	pane.selectable = make(map[int]bool)
 	pane.addDynamicLists()
 	pane.list.AddItem("", "", 0, nil)
 	pane.addProjectList()
@@ -170,6 +232,39 @@ func (pane *ProjectPane) GetActiveProject() *model.Project {
 	return pane.activeProject
 }
 
+// RenameActiveProject edits the current project without leaving the task list.
+func (pane *ProjectPane) RenameActiveProject() {
+	if pane.activeProject == nil {
+		statusBar.showForSeconds("[yellow]Select a project before renaming it", 4)
+		return
+	}
+	showTextPrompt("Rename project", "Name: ", pane.activeProject.Title, func(value string) {
+		name := strings.TrimSpace(value)
+		if len(name) < 3 {
+			statusBar.showForSeconds("[red]Project name should be at least 3 characters", 5)
+			return
+		}
+		previous := pane.activeProject.Title
+		pane.activeProject.Title = name
+		if err := pane.repo.Update(pane.activeProject); err != nil {
+			pane.activeProject.Title = previous
+			statusBar.showForSeconds("[red]Could not rename project: "+err.Error(), 5)
+			return
+		}
+		idx := pane.list.GetCurrentItem()
+		prefix := "- "
+		if pane.activeProject.Archived {
+			prefix = "[::d]~ "
+		}
+		pane.list.SetItemText(idx, prefix+tview.Escape(name), "")
+		projectDetailPane.SetProject(pane.activeProject)
+		if taskPane.viewMode == "project" {
+			taskPane.SetTitle("[::u]T[::-]asks — " + tview.Escape(name))
+		}
+		statusBar.showForSeconds("[lime]Project renamed", 4)
+	})
+}
+
 // ArchiveActiveProject archives the currently active project (hides it from the main list)
 func (pane *ProjectPane) ArchiveActiveProject() {
 	if pane.activeProject == nil {
@@ -180,6 +275,7 @@ func (pane *ProjectPane) ArchiveActiveProject() {
 		return
 	}
 	pane.activeProject.Archived = true
+	pane.activeProject = nil
 	statusBar.showForSeconds("[yellow]Project archived.", 5)
 	taskPane.ClearList()
 	removeThirdCol()
@@ -196,6 +292,7 @@ func (pane *ProjectPane) UnarchiveActiveProject() {
 		return
 	}
 	pane.activeProject.Archived = false
+	pane.activeProject = nil
 	statusBar.showForSeconds("[lime]Project restored to active.", 5)
 	taskPane.ClearList()
 	removeThirdCol()
@@ -216,7 +313,9 @@ func (pane *ProjectPane) addArchivedSection() {
 }
 
 func (pane *ProjectPane) addArchivedProjectToList(i int) {
-	pane.list.AddItem("[::d]~ "+pane.archivedProjects[i].Title, "", 0, func(idx int) func() {
+	idx := pane.list.GetItemCount()
+	pane.selectable[idx] = true
+	pane.list.AddItem("[::d]~ "+tview.Escape(pane.archivedProjects[i].Title), "", 0, func(idx int) func() {
 		return func() { pane.activateArchivedProject(idx) }
 	}(i))
 }
